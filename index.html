@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -278,6 +279,9 @@ td{padding:13px 18px;vertical-align:middle}
 .conn.load .cd{background:var(--blue);animation:blink 1s ease-in-out infinite}
 .field input[type=file]{padding:9px 10px;cursor:pointer}
 .field input[type=file]::file-selector-button{font-family:var(--f-body);font-weight:600;font-size:12px;color:var(--blue);background:rgba(29,78,216,.08);border:1px solid rgba(29,78,216,.3);border-radius:8px;padding:6px 10px;margin-right:10px;cursor:pointer}
+.d-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.node .by{font-size:11px;color:var(--muted);margin:-1px 0 8px}
+.field input[type=date]{font-family:var(--f-body);color:var(--ink)}
 </style>
 </head>
 <body>
@@ -297,12 +301,6 @@ td{padding:13px 18px;vertical-align:middle}
     <span id="connDot" class="conn off"><span class="cd"></span>未連線</span>
     <button class="btn ghost tiny" id="btnConn" title="Google 連線設定">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4"/><circle cx="8" cy="8" r="2.3"/></svg>連線
-    </button>
-    <button class="btn ghost tiny" id="btnExport" title="匯出 JSON 備份">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v8M5 7l3 3 3-3M3 13h10"/></svg>備份
-    </button>
-    <button class="btn ghost tiny" id="btnImport" title="匯入 JSON">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 11V3M5 6l3-3 3 3M3 13h10"/></svg>還原
     </button>
     <button class="btn primary" id="btnAdd">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v10M3 8h10"/></svg>新增教案
@@ -376,15 +374,14 @@ td{padding:13px 18px;vertical-align:middle}
 <!-- toast -->
 <div class="toast" id="toast"><span class="bar"></span><span id="toastMsg"></span></div>
 
-<input type="file" id="importFile" accept="application/json" style="display:none" />
 
 <script>
 /* ════════════════════════════════════════════════════════
    設定與狀態
    ════════════════════════════════════════════════════════ */
-const URL_KEY="osce-webapp-url";          // Apps Script /exec 網址
-const DEFAULT_URL="https://script.google.com/macros/s/AKfycbw0xFubm-c91AkCUfl8NKVTvS_BKlmr5zKhDHpJ0cE5okUln3QqLdncc0G8l8kuSt-N/exec"; // 已部署後端，預設自動連線
-const CACHE_KEY="osce-cache-v3";          // 本機快取(離線備援)
+const URL_KEY="osce-webapp-url";
+const DEFAULT_URL="https://script.google.com/macros/s/AKfycbw0xFubm-c91AkCUfl8NKVTvS_BKlmr5zKhDHpJ0cE5okUln3QqLdncc0G8l8kuSt-N/exec";
+const CACHE_KEY="osce-cache-v3";
 let db={cases:[],logs:[]};
 let selectedId=null;
 const filters={q:"",dept:"",cat:""};
@@ -406,6 +403,7 @@ const catColor=c=>CAT_COLORS[c]||"#6c7385";
 const $=s=>document.querySelector(s);
 const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const todayStr=()=>new Date().toISOString().slice(0,10);
 function nextCaseId(){
   let n=0; db.cases.forEach(c=>{const m=/^C(\d+)$/.exec(c.id); if(m)n=Math.max(n,+m[1]);});
   return "C"+String(n+1).padStart(3,"0");
@@ -417,12 +415,19 @@ function bumpVersion(v,kind){
   if(kind==="major"){maj++;min=0;} else {min++;}
   return "v"+maj+"."+min;
 }
+function verKey(v){const m=/v?(\d+)\.(\d+)/i.exec(v||"v1.0");return (m?+m[1]:1)*1000+(m?+m[2]:0);}
 function driveLink(id){return id?("https://drive.google.com/file/d/"+encodeURIComponent(id)+"/view"):"";}
 let toastT;
 function toast(msg,tone){
   const t=$("#toast"); $("#toastMsg").textContent=msg;
   t.className="toast on"+(tone?" "+tone:"");
   clearTimeout(toastT); toastT=setTimeout(()=>t.className="toast",3200);
+}
+/* 取某教案最早一筆版本(制訂者/制訂日期來源) */
+function firstLog(caseId){
+  const ls=db.logs.filter(l=>String(l.case_id)===String(caseId))
+    .sort((a,b)=>(a.created_at||"").localeCompare(b.created_at||"")||(verKey(a.version_num)-verKey(b.version_num)));
+  return ls[0]||null;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -441,7 +446,7 @@ async function rawCall(url,opt){
   try{ r=await fetch(url,opt); }
   catch(e){
     console.error("[OSCE] fetch 失敗",e,url);
-    throw new Error("連不上後端：請確認①部署存取權限設為『任何人(Anyone)』②改過程式要『重新部署新版本』③若在聊天預覽中測試，請改用下載的檔案或 GitHub Pages。");
+    throw new Error("連不上後端：請確認①部署存取權限為『任何人(Anyone)』②改過程式要『重新部署新版本』③若在聊天預覽中測試，請改用下載的檔案或 GitHub Pages。");
   }
   const txt=await r.text();
   let j;
@@ -449,7 +454,7 @@ async function rawCall(url,opt){
   catch(e){
     console.error("[OSCE] 回傳非 JSON：",txt.slice(0,400));
     if(/accounts\.google\.com|<html|Sign in|登入|Moved Temporarily|Temporary Redirect/i.test(txt))
-      throw new Error("後端回傳的是 Google 登入頁，不是資料。請到 Apps Script → 部署 → 管理部署作業，把『誰可以存取』改成『任何人』後重新部署新版本。");
+      throw new Error("後端回傳的是 Google 登入頁，不是資料。請把『誰可以存取』改成『任何人』後重新部署新版本。");
     throw new Error("後端回傳格式異常："+txt.slice(0,120));
   }
   if(!j.ok) throw new Error(j.error||"操作失敗");
@@ -461,7 +466,6 @@ async function apiGet(){
 }
 async function apiPost(payload){
   const u=getUrl(); if(!u) throw new Error("尚未設定連線網址");
-  // 預設 text/plain 送出，避免 CORS 預檢；Apps Script 以 JSON.parse 解析
   return rawCall(u,{method:"POST",body:JSON.stringify(payload)});
 }
 function fileToBase64(file){
@@ -474,13 +478,10 @@ async function uploadToDrive(file){
     mimeType:file.type||"application/octet-stream",dataBase64:b64});
 }
 
-/* 連線狀態指示 */
 function setStatus(txt,kind){
   const el=$("#connDot"); if(!el)return;
   el.className="conn"+(kind?(" "+kind):""); el.innerHTML='<span class="cd"></span>'+esc(txt);
 }
-
-/* 載入資料：以 Sheet 為準，失敗則退回本機快取 */
 async function loadData(){
   if(getUrl()){
     setStatus("連線中…","load");
@@ -579,18 +580,28 @@ function renderDetail(){
       <div>從左側選取一份教案<br/>檢視其完整修版生命週期</div></div>`;
     return;
   }
+  const fl=firstLog(c.id);
+  const author=fl?(fl.editor||""):"";
+  const created=fl?(fl.created_at||""):"";
   const logs=db.logs.filter(l=>String(l.case_id)===String(c.id))
-    .sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
+    .sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||"")||(verKey(b.version_num)-verKey(a.version_num)));
   const nextMinor=bumpVersion(c.current_version,"minor");
   const nextMajor=bumpVersion(c.current_version,"major");
   d.innerHTML=`
     <div class="d-head">
-      <div class="cat">${esc(c.category||"未分類")}</div>
+      <div class="d-top">
+        <div class="cat">${esc(c.category||"未分類")}</div>
+        <button class="btn ghost tiny" id="bEdit" title="編輯基本資料(不改版次)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11 2.5l2.5 2.5M3 13l.5-2.5L11 3l2 2-7.5 7.5L3 13z"/></svg>編輯
+        </button>
+      </div>
       <h2>${esc(c.title)}</h2>
       <div class="attrs">
         <span class="chip"><span style="font-family:var(--f-mono);color:var(--faint)">${esc(c.id)}</span></span>
         <span class="chip dept">${esc(c.department||"—")}</span>
         <span class="chip" style="color:var(--gold-deep)">當前 ${esc(c.current_version)}</span>
+        ${author?`<span class="chip">制訂者 ${esc(author)}</span>`:""}
+        ${created?`<span class="chip" style="color:var(--muted)">${fmtDate(created)} 制訂</span>`:""}
       </div>
     </div>
     <div class="rev-actions">
@@ -606,6 +617,7 @@ function renderDetail(){
           <span class="pt"></span>
           <div class="v"><b>${esc(l.version_num)}</b>${i===0?'<span class="tag">最新</span>':''}
             <span class="date">${fmtDate(l.created_at)}</span></div>
+          ${l.editor?`<div class="by">${i===0&&logs.length>1?"修訂者":"修訂者"}：${esc(l.editor)}</div>`:""}
           <p class="sum">${esc(l.change_summary||"（未填寫修改事由）")}</p>
           ${link
             ? `<button class="view" data-link="${esc(link)}">
@@ -617,6 +629,7 @@ function renderDetail(){
         </div>`;}).join("")
         : `<div style="color:var(--faint);font-size:13px;padding:8px 0">尚無修版紀錄。</div>`}
     </div>`;
+  $("#bEdit").onclick=()=>openEdit(c);
   $("#bMinor").onclick=()=>openRevision(c,"minor");
   $("#bMajor").onclick=()=>openRevision(c,"major");
   d.querySelectorAll(".view[data-link]").forEach(b=>
@@ -636,11 +649,15 @@ $("#scrim").onclick=e=>{if(e.target===$("#scrim"))closeScrim();};
 function openAdd(){
   openScrim(`
     <h3>新增教案</h3>
-    <p class="hint">建立後寫入「教案」分頁；若選擇檔案會一併上傳雲端資料夾並自動綁定。</p>
+    <p class="hint">建立後寫入「教案」分頁；若選擇檔案會一併上傳雲端資料夾。</p>
     <div class="field"><label>教案名稱</label><input id="mTitle" placeholder="例：急性胸痛之病史詢問"/></div>
     <div class="field"><div class="row2">
       <div><label>適用科別</label><select id="mDept">${DEPTS.map(d=>`<option>${esc(d)}</option>`).join("")}</select></div>
       <div><label>教案類型</label><select id="mCat">${CATS.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div>
+    </div></div>
+    <div class="field"><div class="row2">
+      <div><label>制訂教案者</label><input id="mAuthor" placeholder="姓名"/></div>
+      <div><label>制訂日期</label><input type="date" id="mDate" value="${todayStr()}"/></div>
     </div></div>
     <div class="field"><label>初版修改事由 <span class="opt">v1.0</span></label>
       <textarea id="mSum" placeholder="例：依 115 年臨床技能測驗藍圖建立初版教案">建立初版教案</textarea></div>
@@ -662,7 +679,9 @@ async function submitAdd(){
   if(!title){$("#mTitle").style.borderColor="var(--danger)";$("#mTitle").focus();return;}
   const btn=$("#mSave"), o=btn.textContent; btn.disabled=true;
   try{
-    const dept=$("#mDept").value, cat=$("#mCat").value, sum=$("#mSum").value.trim()||"建立初版教案";
+    const dept=$("#mDept").value, cat=$("#mCat").value;
+    const author=$("#mAuthor").value.trim(), date=$("#mDate").value||todayStr();
+    const sum=$("#mSum").value.trim()||"建立初版教案";
     let fid=$("#mFid").value.trim(), link=fid?driveLink(fid):"";
     const f=$("#mFile").files[0];
     if(f){
@@ -670,16 +689,17 @@ async function submitAdd(){
       btn.textContent="上傳檔案中…";
       const up=await uploadToDrive(f); fid=up.fileId; link=up.webViewLink;
     }
-    const logId=uid("L"), now=new Date().toISOString(); let id;
+    const logId=uid("L"); let id;
     if(getUrl()){
       btn.textContent="寫入試算表中…";
       const res=await apiPost({action:"addCase",title,department:dept,category:cat,
-        current_version:"v1.0",change_summary:sum,google_file_id:fid,google_file_link:link,log_id:logId});
+        current_version:"v1.0",change_summary:sum,author,created_at:date,updated_at:date,
+        google_file_id:fid,google_file_link:link,log_id:logId});
       id=res.id;
     }else{ id=nextCaseId(); }
-    db.cases.push({id,title,department:dept,category:cat,current_version:"v1.0",updated_at:now});
-    db.logs.push({id:logId,case_id:id,version_num:"v1.0",change_summary:sum,
-      google_file_id:fid,google_file_link:link,created_at:now});
+    db.cases.push({id,title,department:dept,category:cat,current_version:"v1.0",updated_at:date});
+    db.logs.push({id:logId,case_id:id,version_num:"v1.0",change_summary:sum,editor:author,
+      google_file_id:fid,google_file_link:link,created_at:date});
     selectedId=id; cache(); closeScrim(); renderAll();
     toast(getUrl()?`已建立 ${id}・已寫入「教案」分頁`:`已建立 ${id}（本機暫存，未連線）`, getUrl()?"":"orange");
   }catch(e){ console.error("[OSCE] 建立失敗",e); toast("建立失敗："+e.message,"orange"); btn.disabled=false; btn.textContent=o; }
@@ -694,6 +714,10 @@ function openRevision(c,kind){
     <h3>${isMaj?"重大改版":"微調改版"}</h3>
     <p class="hint">${esc(c.title)}　${esc(c.current_version)}
       <span style="color:${isMaj?'var(--orange)':'var(--blue)'};font-family:var(--f-mono);font-weight:700"> → ${next}</span></p>
+    <div class="field"><div class="row2">
+      <div><label>修訂者</label><input id="rEditor" placeholder="姓名"/></div>
+      <div><label>修訂日期</label><input type="date" id="rDate" value="${todayStr()}"/></div>
+    </div></div>
     <div class="field"><label>修改事由 / 摘要</label>
       <textarea id="rSum" placeholder="${isMaj?'例：依新版臨床指引重編情境與評分表':'例：修正評分表配分與標準化病人台詞'}"></textarea></div>
     <div class="field"><label>上傳新版檔案 <span class="opt">Word／PDF，選填</span></label>
@@ -706,11 +730,12 @@ function openRevision(c,kind){
     </div>`);
   $("#rCancel").onclick=closeScrim;
   $("#rSave").onclick=()=>submitRevision(c,kind,next);
-  setTimeout(()=>$("#rSum").focus(),60);
+  setTimeout(()=>$("#rEditor").focus(),60);
 }
 async function submitRevision(c,kind,next){
   const isMaj=kind==="major"; const btn=$("#rSave"), o=btn.textContent; btn.disabled=true;
   try{
+    const editor=$("#rEditor").value.trim(), date=$("#rDate").value||todayStr();
     const sum=$("#rSum").value.trim()||(isMaj?"重大改版":"微調改版");
     let fid=$("#rFid").value.trim(), link=fid?driveLink(fid):"";
     const f=$("#rFile").files[0];
@@ -718,17 +743,65 @@ async function submitRevision(c,kind,next){
       if(!getUrl()){toast("請先設定 Google 連線才能上傳檔案","orange");btn.disabled=false;return;}
       btn.textContent="上傳中…"; const up=await uploadToDrive(f); fid=up.fileId; link=up.webViewLink;
     }
-    const logId=uid("L"), now=new Date().toISOString();
+    const logId=uid("L");
     if(getUrl()){
       btn.textContent="寫入中…";
       await apiPost({action:"addRevision",case_id:c.id,version_num:next,change_summary:sum,
-        google_file_id:fid,google_file_link:link,log_id:logId,updated_at:now});
+        editor,created_at:date,updated_at:date,google_file_id:fid,google_file_link:link,log_id:logId});
     }
-    db.logs.push({id:logId,case_id:c.id,version_num:next,change_summary:sum,
-      google_file_id:fid,google_file_link:link,created_at:now});
-    c.current_version=next; c.updated_at=now; cache(); closeScrim(); renderAll();
+    db.logs.push({id:logId,case_id:c.id,version_num:next,change_summary:sum,editor,
+      google_file_id:fid,google_file_link:link,created_at:date});
+    c.current_version=next; c.updated_at=date; cache(); closeScrim(); renderAll();
     toast(getUrl()?`${c.id} 已改版為 ${next}・已同步`:`${c.id} 已改版為 ${next}（本機暫存）`, isMaj?"orange":"gold");
   }catch(e){ console.error("[OSCE] 改版失敗",e); toast("改版失敗："+e.message,"orange"); btn.disabled=false; btn.textContent=o; }
+}
+
+/* ════════════════════════════════════════════════════════
+   編輯教案（修正打錯的基本資料，不改版次）
+   ════════════════════════════════════════════════════════ */
+function openEdit(c){
+  const fl=firstLog(c.id);
+  const author=fl?(fl.editor||""):"";
+  const created=fl?String(fl.created_at||"").slice(0,10):"";
+  openScrim(`
+    <h3>編輯教案</h3>
+    <p class="hint">修正打錯的基本資料，不會新增版次或時間軸節點。</p>
+    <div class="field"><label>教案名稱</label><input id="eTitle" value="${esc(c.title||"")}"/></div>
+    <div class="field"><div class="row2">
+      <div><label>適用科別</label><select id="eDept">${DEPTS.map(d=>`<option ${d===c.department?"selected":""}>${esc(d)}</option>`).join("")}</select></div>
+      <div><label>教案類型</label><select id="eCat">${CATS.map(x=>`<option ${x===c.category?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
+    </div></div>
+    <div class="field"><div class="row2">
+      <div><label>制訂教案者</label><input id="eAuthor" value="${esc(author)}" placeholder="姓名"/></div>
+      <div><label>制訂日期</label><input type="date" id="eDate" value="${esc(created)}"/></div>
+    </div></div>
+    <div class="acts">
+      <button class="btn ghost" id="eCancel">取消</button>
+      <button class="btn primary" id="eSave">儲存變更</button>
+    </div>`);
+  $("#eCancel").onclick=closeScrim;
+  $("#eSave").onclick=()=>submitEdit(c);
+  setTimeout(()=>$("#eTitle").focus(),60);
+}
+async function submitEdit(c){
+  const title=$("#eTitle").value.trim();
+  if(!title){$("#eTitle").style.borderColor="var(--danger)";$("#eTitle").focus();return;}
+  const btn=$("#eSave"), o=btn.textContent; btn.disabled=true;
+  try{
+    const dept=$("#eDept").value, cat=$("#eCat").value;
+    const author=$("#eAuthor").value.trim(), date=$("#eDate").value||"";
+    if(getUrl()){
+      btn.textContent="儲存中…";
+      await apiPost({action:"updateCase",id:c.id,title,department:dept,category:cat,author,created_at:date});
+    }
+    c.title=title; c.department=dept; c.category=cat;
+    const fl=firstLog(c.id);
+    if(fl){ fl.editor=author; if(date) fl.created_at=date; }
+    const ds=db.logs.filter(l=>String(l.case_id)===String(c.id)).map(l=>l.created_at||"").sort();
+    if(ds.length) c.updated_at=ds[ds.length-1];
+    cache(); closeScrim(); renderAll();
+    toast(getUrl()?`${c.id} 已更新`:`${c.id} 已更新（本機）`,"");
+  }catch(e){ console.error("[OSCE] 編輯失敗",e); toast("更新失敗："+e.message,"orange"); btn.disabled=false; btn.textContent=o; }
 }
 
 /* ════════════════════════════════════════════════════════
@@ -737,11 +810,11 @@ async function submitRevision(c,kind,next){
 function openConn(){
   openScrim(`
     <h3>Google 連線設定</h3>
-    <p class="hint">貼上你部署的 Apps Script 網頁應用程式 (/exec) 網址。教案寫入「教案」分頁，檔案上傳到指定雲端資料夾。</p>
+    <p class="hint">平台已內建後端網址；如需更換，貼上新的 Apps Script /exec 網址。</p>
     <div class="field"><label>Web App 網址</label>
       <input id="cUrl" placeholder="https://script.google.com/macros/s/XXXX/exec" value="${esc(getUrl())}"/></div>
     <div class="field" style="font-size:11.5px;color:var(--faint);line-height:1.7">
-      連結目標：<br>· 試算表「教案」分頁(主檔)＋「版本紀錄」分頁(自動建立)<br>· 雲端資料夾(教案檔案)
+      連結目標：<br>· 試算表「教案」分頁(主檔)＋「版本紀錄」分頁<br>· 雲端資料夾(教案檔案)
     </div>
     <div class="acts">
       <button class="btn ghost" id="cTest">測試連線</button>
@@ -759,29 +832,6 @@ function openConn(){
 }
 
 /* ════════════════════════════════════════════════════════
-   匯出 / 匯入（本機 JSON 備份）
-   ════════════════════════════════════════════════════════ */
-$("#btnExport").onclick=()=>{
-  const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=`osce-cases-${new Date().toISOString().slice(0,10)}.json`;
-  a.click(); URL.revokeObjectURL(a.href); toast("已匯出 JSON 備份");
-};
-$("#btnImport").onclick=()=>$("#importFile").click();
-$("#importFile").onchange=e=>{
-  const f=e.target.files[0]; if(!f)return; const r=new FileReader();
-  r.onload=()=>{ try{
-      const d=JSON.parse(r.result);
-      if(!Array.isArray(d.cases)||!Array.isArray(d.logs))throw 0;
-      db=d; selectedId=null; cache(); renderAll();
-      toast(`已還原 ${db.cases.length} 份教案（僅本機）`,"gold");
-    }catch{toast("檔案格式不符，還原失敗","orange");}
-    e.target.value=""; };
-  r.readAsText(f);
-};
-
-/* ════════════════════════════════════════════════════════
    事件
    ════════════════════════════════════════════════════════ */
 $("#q").oninput=e=>{filters.q=e.target.value;renderTable();};
@@ -793,7 +843,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeScrim();});
 
 function renderAll(){renderKPI();renderFilters();renderTable();renderDetail();}
 
-/* 啟動：淨空範例、以 Sheet 為資料來源 */
+/* 啟動：以 Sheet 為資料來源 */
 (async function init(){ await loadData(); })();
 
 </script>
