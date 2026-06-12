@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -10,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
 
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('osce-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));}catch(e){}</script>
 <style>
 :root{
   /* ── 明亮底 · 帶藍漸層 ── */
@@ -281,6 +283,37 @@ td{padding:13px 18px;vertical-align:middle}
 .d-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .node .by{font-size:11px;color:var(--muted);margin:-1px 0 8px}
 .field input[type=date]{font-family:var(--f-body);color:var(--ink)}
+
+
+/* ════════ 深色模式 ════════ */
+[data-theme="dark"]{
+  --bg-1:#0a1326; --bg-2:#0c1832; --bg-3:#0e1d3c;
+  --blue:#4b8bff; --blue-deep:#1e3a8a; --blue-bright:#5b9dff; --sky:#7cb1ff;
+  --gold:#f0a93a; --gold-deep:#f8c878; --orange:#fb8b3c; --danger:#fb6f8a;
+  --text:#e7eefb; --ink:#f4f8ff; --muted:#9fb1d0; --faint:#6c7e9f;
+  --line:rgba(255,255,255,.10); --line-strong:rgba(255,255,255,.18);
+  --glass:rgba(18,30,56,.58); --glass-2:rgba(24,38,68,.72); --glass-hi:rgba(34,52,90,.92);
+}
+[data-theme="dark"] .glass{border-color:rgba(255,255,255,.10)}
+[data-theme="dark"] .glass::before{opacity:.18}
+[data-theme="dark"] thead th{background-color:rgba(10,20,42,.92)}
+[data-theme="dark"] .btn.ghost{background-color:rgba(255,255,255,.05)}
+[data-theme="dark"] .search,
+[data-theme="dark"] select,
+[data-theme="dark"] .field input,
+[data-theme="dark"] .field textarea,
+[data-theme="dark"] .field select,
+[data-theme="dark"] .conn{background-color:rgba(255,255,255,.05)}
+[data-theme="dark"] .field input:focus,
+[data-theme="dark"] .field textarea:focus,
+[data-theme="dark"] .field select:focus{background-color:rgba(255,255,255,.09)}
+[data-theme="dark"] .chip{background-color:rgba(255,255,255,.06)}
+[data-theme="dark"] .node .sum{background-color:rgba(255,255,255,.04)}
+[data-theme="dark"] .toast{background-color:rgba(22,34,60,.92);border-color:rgba(255,255,255,.12)}
+[data-theme="dark"] .skyline{opacity:.10}
+[data-theme="dark"] select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%239fb1d0' stroke-width='2'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+}
 </style>
 </head>
 <body>
@@ -296,6 +329,7 @@ td{padding:13px 18px;vertical-align:middle}
       </div>
     </div>
     <div class="spacer"></div>
+    <button class="btn ghost tiny" id="btnTheme" title="切換深色 / 淺色模式"></button>
     <span id="connDot" class="conn off"><span class="cd"></span>未連線</span>
     <button class="btn ghost tiny" id="btnConn" title="Google 連線設定">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4"/><circle cx="8" cy="8" r="2.3"/></svg>連線
@@ -368,6 +402,28 @@ td{padding:13px 18px;vertical-align:middle}
 
 
 <script>
+/* ── 主題（深 / 淺）── */
+const THEME_KEY="osce-theme";
+const ICON_MOON='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 9.6A5.6 5.6 0 116.4 2.5 4.4 4.4 0 1013.5 9.6z"/></svg>';
+const ICON_SUN ='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M13 3l-1.1 1.1M4.1 11.9L3 13"/></svg>';
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme", t);
+  const b=document.getElementById("btnTheme");
+  if(b) b.innerHTML = (t==="dark") ? ICON_SUN+"淺色" : ICON_MOON+"深色";
+}
+function initTheme(){
+  let t=null; try{ t=localStorage.getItem(THEME_KEY); }catch(e){}
+  if(!t) t=(window.matchMedia&&matchMedia("(prefers-color-scheme:dark)").matches)?"dark":"light";
+  applyTheme(t);
+}
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light";
+  const nt=cur==="dark"?"light":"dark";
+  try{ localStorage.setItem(THEME_KEY,nt); }catch(e){}
+  applyTheme(nt);
+}
+initTheme();
+
 /* ════════════════════════════════════════════════════════
    設定與狀態
    ════════════════════════════════════════════════════════ */
@@ -676,19 +732,24 @@ async function submitAdd(){
     const sum=$("#mSum").value.trim()||"建立初版教案";
     let fid=$("#mFid").value.trim(), link=fid?driveLink(fid):"";
     const f=$("#mFile").files[0];
-    if(f){
-      if(!getUrl()){toast("請先設定 Google 連線才能上傳檔案","orange");btn.disabled=false;return;}
-      btn.textContent="上傳檔案中…";
-      const up=await uploadToDrive(f); fid=up.fileId; link=up.webViewLink;
-    }
     const logId=uid("L"); let id;
     if(getUrl()){
-      btn.textContent="寫入試算表中…";
-      const res=await apiPost({action:"addCase",title,department:dept,category:cat,
+      const payload={action:"addCase",title,department:dept,category:cat,
         current_version:"v1.0",change_summary:sum,author,created_at:date,updated_at:date,
-        google_file_id:fid,google_file_link:link,log_id:logId});
+        google_file_id:fid,google_file_link:link,log_id:logId};
+      if(f){
+        btn.textContent="上傳並建立中…";
+        payload.filename=f.name;
+        payload.mimeType=f.type||"application/octet-stream";
+        payload.dataBase64=await fileToBase64(f);   // 交給後端歸檔到教案專屬資料夾
+      }else{ btn.textContent="寫入試算表中…"; }
+      const res=await apiPost(payload);
       id=res.id;
-    }else{ id=nextCaseId(); }
+      if(res.fileId){ fid=res.fileId; link=res.google_file_link||driveLink(res.fileId); }
+    }else{
+      if(f) toast("離線狀態無法上傳檔案，本次將略過附檔","orange");
+      id=nextCaseId();
+    }
     db.cases.push({id,title,department:dept,category:cat,current_version:"v1.0",updated_at:date});
     db.logs.push({id:logId,case_id:id,version_num:"v1.0",change_summary:sum,editor:author,
       google_file_id:fid,google_file_link:link,created_at:date});
@@ -731,15 +792,21 @@ async function submitRevision(c,kind,next){
     const sum=$("#rSum").value.trim()||(isMaj?"重大改版":"微調改版");
     let fid=$("#rFid").value.trim(), link=fid?driveLink(fid):"";
     const f=$("#rFile").files[0];
-    if(f){
-      if(!getUrl()){toast("請先設定 Google 連線才能上傳檔案","orange");btn.disabled=false;return;}
-      btn.textContent="上傳中…"; const up=await uploadToDrive(f); fid=up.fileId; link=up.webViewLink;
-    }
     const logId=uid("L");
     if(getUrl()){
-      btn.textContent="寫入中…";
-      await apiPost({action:"addRevision",case_id:c.id,version_num:next,change_summary:sum,
-        editor,created_at:date,updated_at:date,google_file_id:fid,google_file_link:link,log_id:logId});
+      const payload={action:"addRevision",case_id:c.id,title:c.title,version_num:next,
+        change_summary:sum,editor,created_at:date,updated_at:date,
+        google_file_id:fid,google_file_link:link,log_id:logId};
+      if(f){
+        btn.textContent="上傳並改版中…";
+        payload.filename=f.name;
+        payload.mimeType=f.type||"application/octet-stream";
+        payload.dataBase64=await fileToBase64(f);   // 歸檔到同一個教案資料夾
+      }else{ btn.textContent="寫入中…"; }
+      const res=await apiPost(payload);
+      if(res.fileId){ fid=res.fileId; link=res.google_file_link||driveLink(res.fileId); }
+    }else{
+      if(f) toast("離線狀態無法上傳檔案，本次將略過附檔","orange");
     }
     db.logs.push({id:logId,case_id:c.id,version_num:next,change_summary:sum,editor,
       google_file_id:fid,google_file_link:link,created_at:date});
@@ -830,6 +897,7 @@ $("#q").oninput=e=>{filters.q=e.target.value;renderTable();};
 $("#fDept").onchange=e=>{filters.dept=e.target.value;renderTable();};
 $("#fCat").onchange=e=>{filters.cat=e.target.value;renderTable();};
 $("#btnAdd").onclick=openAdd;
+$("#btnTheme").onclick=toggleTheme;
 $("#btnConn").onclick=openConn;
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeScrim();});
 
