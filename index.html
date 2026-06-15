@@ -673,6 +673,7 @@ const CAT_COLORS={
 };
 const CATS=Object.keys(CAT_COLORS);
 const catColor=c=>CAT_COLORS[c]||"#6c7385";
+const APP_TIME_ZONE="Asia/Taipei";
 
 /* ════════════════════════════════════════════════════════
    工具
@@ -680,12 +681,29 @@ const catColor=c=>CAT_COLORS[c]||"#6c7385";
 const $=s=>document.querySelector(s);
 const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
-const todayStr=()=>new Date().toISOString().slice(0,10);
+function datePartsInAppTZ(date){
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:APP_TIME_ZONE,year:"numeric",month:"2-digit",day:"2-digit"
+  }).formatToParts(date).reduce((acc,p)=>{acc[p.type]=p.value;return acc;},{});
+  return parts.year&&parts.month&&parts.day?`${parts.year}-${parts.month}-${parts.day}`:"";
+}
+const todayStr=()=>datePartsInAppTZ(new Date());
 function nextCaseId(){
   let n=0; db.cases.forEach(c=>{const m=/^C(\d+)$/.exec(c.id); if(m)n=Math.max(n,+m[1]);});
   return "C"+String(n+1).padStart(3,"0");
 }
-function fmtDate(iso){const d=new Date(iso);return isNaN(d)?"—":d.toISOString().slice(0,10);}
+function fmtDate(iso){
+  if(!iso) return "—";
+  const raw=String(iso).trim();
+  const dateOnly=/^\d{4}-\d{2}-\d{2}/.exec(raw);
+  if(dateOnly&&!raw.includes("T")) return dateOnly[0];
+  const d=new Date(raw);
+  return isNaN(d)?"—":datePartsInAppTZ(d);
+}
+function dateKey(iso){
+  const d=fmtDate(iso);
+  return d==="—"?"":d;
+}
 function bumpVersion(v,kind){
   const m=/v?(\d+)\.(\d+)/i.exec(v||"v1.0");
   let maj=m?+m[1]:1, min=m?+m[2]:0;
@@ -703,7 +721,7 @@ function toast(msg,tone){
 /* 取某教案最早一筆版本(制訂者/制訂日期來源) */
 function firstLog(caseId){
   const ls=db.logs.filter(l=>String(l.case_id)===String(caseId))
-    .sort((a,b)=>(a.created_at||"").localeCompare(b.created_at||"")||(verKey(a.version_num)-verKey(b.version_num)));
+    .sort((a,b)=>dateKey(a.created_at).localeCompare(dateKey(b.created_at))||(verKey(a.version_num)-verKey(b.version_num)));
   return ls[0]||null;
 }
 
@@ -782,9 +800,9 @@ async function loadData(){
 function renderKPI(){
   $("#kTotal").textContent=db.cases.length;
   $("#kTotalSub").textContent=`不重複 Case ID · ${db.logs.length} 筆修訂紀錄`;
-  const now=new Date(), ym=now.toISOString().slice(0,7), yy=now.toISOString().slice(0,4);
-  const mCount=db.logs.filter(l=>(l.created_at||"").slice(0,7)===ym).length;
-  const yCount=db.logs.filter(l=>(l.created_at||"").slice(0,4)===yy).length;
+  const today=todayStr(), ym=today.slice(0,7), yy=today.slice(0,4);
+  const mCount=db.logs.filter(l=>dateKey(l.created_at).slice(0,7)===ym).length;
+  const yCount=db.logs.filter(l=>dateKey(l.created_at).slice(0,4)===yy).length;
   $("#kMonth").innerHTML=`${mCount}<em>本月修訂</em>`;
   $("#kYearSub").textContent=`本年度新增 / 修訂 ${yCount} 件`;
   renderMonthDetail(ym);
@@ -804,13 +822,13 @@ function renderKPI(){
    渲染：篩選 / 主表格
    ════════════════════════════════════════════════════════ */
 function renderMonthDetail(ym){
-  const monthLogs=db.logs.filter(l=>(l.created_at||"").slice(0,7)===ym)
-    .sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||"")||(verKey(b.version_num)-verKey(a.version_num)));
+  const monthLogs=db.logs.filter(l=>dateKey(l.created_at).slice(0,7)===ym)
+    .sort((a,b)=>dateKey(b.created_at).localeCompare(dateKey(a.created_at))||(verKey(b.version_num)-verKey(a.version_num)));
   const firstByCase={};
   db.logs.forEach(l=>{
     const id=String(l.case_id||"");
     if(!id) return;
-    if(!firstByCase[id]||(l.created_at||"").localeCompare(firstByCase[id].created_at||"")<0) firstByCase[id]=l;
+    if(!firstByCase[id]||dateKey(l.created_at).localeCompare(dateKey(firstByCase[id].created_at))<0) firstByCase[id]=l;
   });
   const newCount=monthLogs.filter(l=>firstByCase[String(l.case_id||"")]===l).length;
   const revCount=Math.max(monthLogs.length-newCount,0);
@@ -854,8 +872,8 @@ function filteredCases(){
     .filter(c=>!filters.cat||c.category===filters.cat)
     .filter(c=>!q||((c.title||"")+" "+(c.id||"")).toLowerCase().includes(q))
     .sort((a,b)=>updatedSort==="asc"
-      ? (a.updated_at||"").localeCompare(b.updated_at||"")
-      : (b.updated_at||"").localeCompare(a.updated_at||""));
+      ? dateKey(a.updated_at).localeCompare(dateKey(b.updated_at))
+      : dateKey(b.updated_at).localeCompare(dateKey(a.updated_at)));
 }
 function renderTable(){
   const list=filteredCases(); const tb=$("#rows");
@@ -903,7 +921,7 @@ function renderDetail(){
   const author=fl?(fl.editor||""):"";
   const created=fl?(fl.created_at||""):"";
   const logs=db.logs.filter(l=>String(l.case_id)===String(c.id))
-    .sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||"")||(verKey(b.version_num)-verKey(a.version_num)));
+    .sort((a,b)=>dateKey(b.created_at).localeCompare(dateKey(a.created_at))||(verKey(b.version_num)-verKey(a.version_num)));
   const nextMinor=bumpVersion(c.current_version,"minor");
   const nextMajor=bumpVersion(c.current_version,"major");
   d.innerHTML=`
@@ -1092,7 +1110,7 @@ async function submitRevision(c,kind,next){
 function openEdit(c){
   const fl=firstLog(c.id);
   const author=fl?(fl.editor||""):"";
-  const created=fl?String(fl.created_at||"").slice(0,10):"";
+  const created=fl?dateKey(fl.created_at):"";
   openScrim(`
     <h3>編輯教案</h3>
     <p class="hint">修正打錯的基本資料，不會新增版次或時間軸節點。</p>
@@ -1127,7 +1145,7 @@ async function submitEdit(c){
     c.title=title; c.department=dept; c.category=cat;
     const fl=firstLog(c.id);
     if(fl){ fl.editor=author; if(date) fl.created_at=date; }
-    const ds=db.logs.filter(l=>String(l.case_id)===String(c.id)).map(l=>l.created_at||"").sort();
+    const ds=db.logs.filter(l=>String(l.case_id)===String(c.id)).map(l=>dateKey(l.created_at)).sort();
     if(ds.length) c.updated_at=ds[ds.length-1];
     cache(); closeScrim(); renderAll();
     toast(getUrl()?`${c.id} 已更新`:`${c.id} 已更新（本機）`,"");
