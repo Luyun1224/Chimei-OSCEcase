@@ -123,6 +123,33 @@ body::before{
 .kpi .sub{font-size:12px;color:var(--faint)}
 .kpi .val em{font-size:15px;font-style:normal;color:var(--muted);margin-left:6px;font-weight:500}
 
+
+.kpi-updates{overflow:hidden}
+.kpi-updates .kpi-pop{
+  position:relative;z-index:1;max-height:0;margin-top:0;padding:0 14px;border-radius:14px;
+  background:var(--glass-hi);border:0 solid transparent;box-shadow:none;opacity:0;overflow:hidden;
+  transform:translateY(-4px);transition:max-height .22s ease,margin-top .18s ease,padding .18s ease,opacity .16s ease,transform .18s ease,border-color .18s ease;color:var(--text)
+}
+.kpi-updates:hover .kpi-pop,.kpi-updates:focus-within .kpi-pop{
+  max-height:320px;margin-top:14px;padding:14px;border-width:1px;border-color:var(--line-strong);
+  opacity:1;transform:translateY(0);box-shadow:0 14px 34px -22px rgba(21,48,126,.38)
+}
+.pop-title{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:10px}
+.pop-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.pop-stats span{font-size:12px;color:var(--muted);padding:8px 9px;border-radius:10px;background:rgba(29,78,216,.07);border:1px solid var(--line)}
+.pop-stats b{font:800 18px/1 var(--f-display);color:var(--blue);margin-right:4px}
+.pop-list{display:flex;flex-direction:column;gap:7px;max-height:188px;overflow:auto}
+.pop-item{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;font-size:12px}
+.pop-date,.pop-ver{font-family:var(--f-mono);color:var(--faint);white-space:nowrap}
+.pop-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pop-empty,.pop-more{font-size:12px;color:var(--faint);padding-top:2px}
+.th-sort{
+  all:unset;display:inline-flex;align-items:center;gap:5px;cursor:pointer;border-radius:8px;padding:5px 7px;margin:-5px -7px;
+  color:var(--muted);font:700 11px/1 var(--f-body);letter-spacing:.8px;text-transform:uppercase
+}
+.th-sort:hover{background:rgba(29,78,216,.08);color:var(--blue)}
+.th-sort span{font:800 12px var(--f-mono)}
+
 /* 類型分佈卡 */
 .dist-bar{height:9px;border-radius:6px;display:flex;overflow:hidden;margin:14px 0 11px;background:rgba(21,48,126,.07)}
 .dist-bar span{height:100%;transition:width .6s cubic-bezier(.2,.8,.2,1)}
@@ -541,10 +568,11 @@ tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
       <div class="val" id="kTotal">0</div>
       <div class="sub" id="kTotalSub">不重複 Case ID 總量</div>
     </div>
-    <div class="glass kpi">
+    <div class="glass kpi kpi-updates" id="kUpdates" tabindex="0" aria-describedby="kMonthDetail">
       <div class="lbl"><span class="dot" style="background:var(--gold)"></span>近期賦能與更新</div>
       <div class="val" id="kMonth">0<em>本月修訂</em></div>
       <div class="sub" id="kYearSub">本年度新增 / 修訂 0 件</div>
+      <div class="kpi-pop" id="kMonthDetail" role="tooltip"></div>
     </div>
     <div class="glass kpi">
       <div class="lbl"><span class="dot" style="background:var(--orange)"></span>類型分佈佔比</div>
@@ -571,7 +599,9 @@ tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
               <th>教案名稱與編號</th>
               <th>科別 / 類型</th>
               <th>最新版次</th>
-              <th class="col-type">最後修改</th>
+              <th class="col-type">
+                <button class="th-sort" id="sortUpdated" type="button" title="依修訂日期排序" aria-label="依修訂日期排序">最後修改 <span id="sortUpdatedIcon">↓</span></button>
+              </th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
@@ -629,6 +659,7 @@ const DEFAULT_URL="https://script.google.com/macros/s/AKfycbw0xFubm-c91AkCUfl8NK
 const CACHE_KEY="osce-cache-v3";
 let db={cases:[],logs:[]};
 let selectedId=null;
+let updatedSort="desc";
 const filters={q:"",dept:"",cat:""};
 
 const DEPTS=["內科","外科","兒科","婦科","急診"];
@@ -755,6 +786,7 @@ function renderKPI(){
   const yCount=db.logs.filter(l=>(l.created_at||"").slice(0,4)===yy).length;
   $("#kMonth").innerHTML=`${mCount}<em>本月修訂</em>`;
   $("#kYearSub").textContent=`本年度新增 / 修訂 ${yCount} 件`;
+  renderMonthDetail(ym);
   const counts={}; db.cases.forEach(c=>counts[c.category]=(counts[c.category]||0)+1);
   const total=db.cases.length||1;
   const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
@@ -770,6 +802,35 @@ function renderKPI(){
 /* ════════════════════════════════════════════════════════
    渲染：篩選 / 主表格
    ════════════════════════════════════════════════════════ */
+function renderMonthDetail(ym){
+  const monthLogs=db.logs.filter(l=>(l.created_at||"").slice(0,7)===ym)
+    .sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||"")||(verKey(b.version_num)-verKey(a.version_num)));
+  const firstByCase={};
+  db.logs.forEach(l=>{
+    const id=String(l.case_id||"");
+    if(!id) return;
+    if(!firstByCase[id]||(l.created_at||"").localeCompare(firstByCase[id].created_at||"")<0) firstByCase[id]=l;
+  });
+  const newCount=monthLogs.filter(l=>firstByCase[String(l.case_id||"")]===l).length;
+  const revCount=Math.max(monthLogs.length-newCount,0);
+  const caseTitle=id=>(db.cases.find(c=>String(c.id)===String(id))||{}).title||id||"未命名教案";
+  const detail=$("#kMonthDetail");
+  if(!detail) return;
+  detail.innerHTML=`
+    <div class="pop-title">${esc(ym)} 本月明細</div>
+    <div class="pop-stats">
+      <span><b>${newCount}</b> 新增教案</span>
+      <span><b>${revCount}</b> 修訂紀錄</span>
+    </div>
+    ${monthLogs.length?`<div class="pop-list">${monthLogs.slice(0,8).map(l=>`
+      <div class="pop-item">
+        <span class="pop-date">${fmtDate(l.created_at)}</span>
+        <span class="pop-name">${esc(caseTitle(l.case_id))}</span>
+        <span class="pop-ver">${esc(l.version_num||"")}</span>
+      </div>`).join("")}</div>`:`<div class="pop-empty">本月尚無新增或修訂紀錄。</div>`}
+    ${monthLogs.length>8?`<div class="pop-more">另有 ${monthLogs.length-8} 筆未顯示</div>`:""}`;
+}
+
 function renderFilters(){
   const depts=[...new Set(db.cases.map(c=>c.department).filter(Boolean))]
     .sort((a,b)=>DEPTS.indexOf(a)-DEPTS.indexOf(b));
@@ -789,7 +850,9 @@ function filteredCases(){
     .filter(c=>!filters.dept||c.department===filters.dept)
     .filter(c=>!filters.cat||c.category===filters.cat)
     .filter(c=>!q||((c.title||"")+" "+(c.id||"")).toLowerCase().includes(q))
-    .sort((a,b)=>(b.updated_at||"").localeCompare(a.updated_at||""));
+    .sort((a,b)=>updatedSort==="asc"
+      ? (a.updated_at||"").localeCompare(b.updated_at||"")
+      : (b.updated_at||"").localeCompare(a.updated_at||""));
 }
 function renderTable(){
   const list=filteredCases(); const tb=$("#rows");
@@ -815,6 +878,9 @@ function renderTable(){
       <td><span class="ver">${esc(c.current_version)}</span></td>
       <td class="col-type"><span class="time">${fmtDate(c.updated_at)}</span></td>
     </tr>`).join("");
+  const sortBtn=$("#sortUpdated"), sortIcon=$("#sortUpdatedIcon");
+  if(sortIcon) sortIcon.textContent=updatedSort==="asc"?"↑":"↓";
+  if(sortBtn) sortBtn.setAttribute("aria-sort",updatedSort==="asc"?"ascending":"descending");
   tb.querySelectorAll("tr").forEach(tr=>tr.onclick=()=>selectCase(tr.dataset.id));
 }
 
@@ -1098,6 +1164,7 @@ function openConn(){
 $("#q").oninput=e=>{filters.q=e.target.value;renderTable();};
 $("#fDept").onchange=e=>{filters.dept=e.target.value;e.target.classList.toggle("has-value",Boolean(e.target.value));renderTable();};
 $("#fCat").onchange=e=>{filters.cat=e.target.value;e.target.classList.toggle("has-value",Boolean(e.target.value));renderTable();};
+$("#sortUpdated").onclick=()=>{updatedSort=updatedSort==="desc"?"asc":"desc";renderTable();};
 $("#btnAdd").onclick=openAdd;
 $("#btnTheme").onclick=toggleTheme;
 $("#btnConn").onclick=openConn;
