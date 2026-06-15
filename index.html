@@ -353,6 +353,8 @@ td{padding:13px 18px;vertical-align:middle}
 [data-theme="dark"] input[type="date"]{color-scheme:dark}
 [data-theme="dark"] .chip.dept{color:#9bc1ff;border-color:rgba(114,167,255,.42);background:rgba(65,126,226,.16)}
 [data-theme="dark"] .chip{border-color:rgba(255,255,255,.24)}
+[data-theme="dark"] .cat-check{background-color:rgba(255,255,255,.05);border-color:rgba(255,255,255,.30);color:#fff}
+[data-theme="dark"] .cat-check:hover{background-color:rgba(255,255,255,.09);border-color:rgba(114,167,255,.46)}
 [data-theme="dark"] .ver{background:rgba(245,180,79,.16);border-color:rgba(245,180,79,.48)}
 [data-theme="dark"] tbody tr{border-bottom-color:rgba(255,255,255,.09)}
 [data-theme="dark"] tbody tr:hover{background:rgba(114,167,255,.10)}
@@ -414,6 +416,13 @@ tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 .modal .acts .btn.ghost{background:transparent}
 .field input,.field textarea,.field select{min-height:46px}
 .field textarea{min-height:78px}
+.cat-checks{display:grid;grid-template-columns:1fr;gap:8px}
+.cat-check{display:flex;align-items:center;gap:8px;min-height:38px;padding:9px 11px;border:1px solid var(--line-strong);border-radius:10px;background-color:rgba(255,255,255,.56);font:600 12.5px var(--f-body);color:var(--ink);cursor:pointer;transition:.15s}
+.cat-check:hover{border-color:rgba(29,78,216,.45);background-color:rgba(255,255,255,.76)}
+.cat-check input{width:16px;min-height:16px;height:16px;margin:0;accent-color:var(--blue);flex:none}
+.cat-check span{line-height:1.35}
+.cat-list{display:flex;flex-wrap:wrap;gap:6px}
+.d-top .cat-list{justify-content:flex-start}
 
 /* 窄螢幕維持工具列清楚 */
 @media(max-width:720px){
@@ -672,6 +681,17 @@ const CAT_COLORS={
   "技能操作":"#0d9488",
 };
 const CATS=Object.keys(CAT_COLORS);
+function categoryList(category){
+  if(Array.isArray(category)) return category.map(x=>String(x).trim()).filter(Boolean);
+  return String(category||"").split(/[、，,]/).map(x=>x.trim()).filter(Boolean);
+}
+function categoryValueFromList(list){return [...new Set(list.map(x=>String(x).trim()).filter(Boolean))].join("、");}
+function categoryLabel(category){const list=categoryList(category); return list.length?list.join("、"):"";}
+function categoryChecks(name,selected){
+  const picked=new Set(categoryList(selected));
+  return `<div class="cat-checks" role="group" aria-label="教案類型（可複選）">${CATS.map((c,i)=>`<label class="cat-check"><input type="checkbox" name="${name}" value="${esc(c)}" ${picked.has(c)||(!selected&&i===0)?"checked":""}/><span>${esc(c)}</span></label>`).join("")}</div>`;
+}
+function selectedCategories(name){return categoryValueFromList([...document.querySelectorAll(`input[name="${name}"]:checked`)].map(x=>x.value));}
 const catColor=c=>CAT_COLORS[c]||"#6c7385";
 const APP_TIME_ZONE="Asia/Taipei";
 
@@ -806,9 +826,9 @@ function renderKPI(){
   $("#kMonth").innerHTML=`${mCount}<em>本月修訂</em>`;
   $("#kYearSub").textContent=`本年度新增 / 修訂 ${yCount} 件`;
   renderMonthDetail(ym);
-  const counts={}; db.cases.forEach(c=>counts[c.category]=(counts[c.category]||0)+1);
-  const total=db.cases.length||1;
+  const counts={}; db.cases.forEach(c=>categoryList(c.category).forEach(cat=>counts[cat]=(counts[cat]||0)+1));
   const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const total=entries.reduce((sum,entry)=>sum+entry[1],0)||1;
   $("#distBar").innerHTML=entries.map(([k,v])=>
     `<span style="width:${v/total*100}%;background:${catColor(k)}"></span>`).join("")||
     `<span style="width:100%;background:rgba(21,48,126,.07)"></span>`;
@@ -855,7 +875,7 @@ function renderMonthDetail(ym){
 function renderFilters(){
   const depts=[...new Set(db.cases.map(c=>c.department).filter(Boolean))]
     .sort((a,b)=>DEPTS.indexOf(a)-DEPTS.indexOf(b));
-  const cats=[...new Set(db.cases.map(c=>c.category).filter(Boolean))]
+  const cats=[...new Set(db.cases.flatMap(c=>categoryList(c.category)).filter(Boolean))]
     .sort((a,b)=>CATS.indexOf(a)-CATS.indexOf(b));
   const fill=(sel,arr,cur,all)=>{
     sel.innerHTML=`<option value="">${all}</option>`+arr.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
@@ -869,7 +889,7 @@ function filteredCases(){
   const q=filters.q.trim().toLowerCase();
   return db.cases
     .filter(c=>!filters.dept||c.department===filters.dept)
-    .filter(c=>!filters.cat||c.category===filters.cat)
+    .filter(c=>!filters.cat||categoryList(c.category).includes(filters.cat))
     .filter(c=>!q||((c.title||"")+" "+(c.id||"")).toLowerCase().includes(q))
     .sort((a,b)=>updatedSort==="asc"
       ? dateKey(a.updated_at).localeCompare(dateKey(b.updated_at))
@@ -894,7 +914,7 @@ function renderTable(){
       <td><div class="c-title">${esc(c.title)}</div><div class="c-id">${esc(c.id)}</div></td>
       <td>
         <div class="meta-row"><span class="chip dept">${esc(c.department||"—")}</span></div>
-        <div class="meta-row"><span class="chip type">${esc(c.category||"—")}</span></div>
+        <div class="meta-row">${categoryList(c.category).length?`<span class="cat-list">${categoryList(c.category).map(cat=>`<span class="chip type">${esc(cat)}</span>`).join("")}</span>`:`<span class="chip type">—</span>`}</div>
       </td>
       <td><span class="ver">${esc(c.current_version)}</span></td>
       <td class="col-type"><span class="time">${fmtDate(c.updated_at)}</span></td>
@@ -927,7 +947,7 @@ function renderDetail(){
   d.innerHTML=`
     <div class="d-head">
       <div class="d-top">
-        <div class="cat">${esc(c.category||"未分類")}</div>
+        <div class="cat">${esc(categoryLabel(c.category)||"未分類")}</div>
         <button class="btn ghost tiny" id="bEdit" title="編輯基本資料(不改版次)">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11 2.5l2.5 2.5M3 13l.5-2.5L11 3l2 2-7.5 7.5L3 13z"/></svg>編輯
         </button>
@@ -990,7 +1010,7 @@ function openAdd(){
     <div class="field"><label>教案名稱</label><input id="mTitle" placeholder="例：急性胸痛之病史詢問"/></div>
     <div class="field"><div class="row2">
       <div><label>適用科別</label><select id="mDept">${DEPTS.map(d=>`<option>${esc(d)}</option>`).join("")}</select></div>
-      <div><label>教案類型</label><select id="mCat">${CATS.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div>
+      <div><label>教案類型 <span class="opt">可複選</span></label>${categoryChecks("mCat","")}</div>
     </div></div>
     <div class="field"><div class="row2">
       <div><label>制訂教案者</label><input id="mAuthor" placeholder="姓名"/></div>
@@ -1016,7 +1036,7 @@ async function submitAdd(){
   if(!title){$("#mTitle").style.borderColor="var(--danger)";$("#mTitle").focus();return;}
   const btn=$("#mSave"), o=btn.textContent; btn.disabled=true;
   try{
-    const dept=$("#mDept").value, cat=$("#mCat").value;
+    const dept=$("#mDept").value, cat=selectedCategories("mCat");
     const author=$("#mAuthor").value.trim(), date=$("#mDate").value||todayStr();
     const sum=$("#mSum").value.trim()||"建立初版教案";
     let fid=$("#mFid").value.trim(), link=fid?driveLink(fid):"";
@@ -1117,7 +1137,7 @@ function openEdit(c){
     <div class="field"><label>教案名稱</label><input id="eTitle" value="${esc(c.title||"")}"/></div>
     <div class="field"><div class="row2">
       <div><label>適用科別</label><select id="eDept">${DEPTS.map(d=>`<option ${d===c.department?"selected":""}>${esc(d)}</option>`).join("")}</select></div>
-      <div><label>教案類型</label><select id="eCat">${CATS.map(x=>`<option ${x===c.category?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
+      <div><label>教案類型 <span class="opt">可複選</span></label>${categoryChecks("eCat",c.category)}</div>
     </div></div>
     <div class="field"><div class="row2">
       <div><label>制訂教案者</label><input id="eAuthor" value="${esc(author)}" placeholder="姓名"/></div>
@@ -1136,7 +1156,7 @@ async function submitEdit(c){
   if(!title){$("#eTitle").style.borderColor="var(--danger)";$("#eTitle").focus();return;}
   const btn=$("#eSave"), o=btn.textContent; btn.disabled=true;
   try{
-    const dept=$("#eDept").value, cat=$("#eCat").value;
+    const dept=$("#eDept").value, cat=selectedCategories("eCat");
     const author=$("#eAuthor").value.trim(), date=$("#eDate").value||"";
     if(getUrl()){
       btn.textContent="儲存中…";
