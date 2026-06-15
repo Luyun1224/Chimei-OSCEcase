@@ -114,7 +114,7 @@ body::before{
 .btn.tiny{padding:6px 10px;font-size:12px}
 
 /* ─────────── KPI row ─────────── */
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px;position:relative;z-index:20}
 .kpi{padding:18px 20px;overflow:hidden}
 .kpi .lbl{font-size:11.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px}
 .kpi .dot{width:7px;height:7px;border-radius:50%}
@@ -124,23 +124,26 @@ body::before{
 .kpi .val em{font-size:15px;font-style:normal;color:var(--muted);margin-left:6px;font-weight:500}
 
 
-.kpi-updates{overflow:visible}
+.kpi-updates{overflow:visible;z-index:1}
+.kpi-updates:hover,.kpi-updates:focus-within{z-index:50}
 .kpi-updates .kpi-pop{
-  position:absolute;left:20px;right:20px;top:calc(100% - 6px);z-index:10;
+  position:absolute;left:50%;right:auto;top:calc(100% + 10px);z-index:60;width:min(560px,calc(100vw - 52px));
   padding:14px;border-radius:14px;background:var(--glass-hi);border:1px solid var(--line-strong);
   box-shadow:0 18px 42px -18px rgba(21,48,126,.42);opacity:0;pointer-events:none;
-  transform:translateY(-4px);transition:.16s;color:var(--text)
+  transform:translate(-50%,-4px);transition:.16s;color:var(--text)
 }
-.kpi-updates:hover .kpi-pop,.kpi-updates:focus-within .kpi-pop{opacity:1;transform:translateY(0)}
+.kpi-updates:hover .kpi-pop,.kpi-updates:focus-within .kpi-pop{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 .pop-title{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:10px}
 .pop-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .pop-stats span{font-size:12px;color:var(--muted);padding:8px 9px;border-radius:10px;background:rgba(29,78,216,.07);border:1px solid var(--line)}
 .pop-stats b{font:800 18px/1 var(--f-display);color:var(--blue);margin-right:4px}
-.pop-list{display:flex;flex-direction:column;gap:7px;max-height:188px;overflow:auto}
-.pop-item{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;font-size:12px}
+.pop-list{display:flex;flex-direction:column;gap:7px;max-height:min(360px,calc(100vh - 300px));overflow:auto;padding-right:3px}
+.pop-item{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center;font-size:12px}
 .pop-date,.pop-ver{font-family:var(--f-mono);color:var(--faint);white-space:nowrap}
 .pop-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pop-empty,.pop-more{font-size:12px;color:var(--faint);padding-top:2px}
+.pop-kind{font-size:10px;font-weight:800;letter-spacing:.4px;padding:2px 6px;border-radius:999px;background:rgba(29,78,216,.08);color:var(--blue);white-space:nowrap}
+.pop-kind.rev{background:rgba(224,137,11,.14);color:var(--gold-deep)}
+.pop-empty{font-size:12px;color:var(--faint);padding-top:2px}
 .th-sort{
   all:unset;display:inline-flex;align-items:center;gap:5px;cursor:pointer;border-radius:8px;padding:5px 7px;margin:-5px -7px;
   color:var(--muted);font:700 11px/1 var(--f-body);letter-spacing:.8px;text-transform:uppercase
@@ -158,7 +161,7 @@ body::before{
 .dist-legend .nm{color:var(--muted)}
 
 /* ─────────── main grid ─────────── */
-.main{display:grid;grid-template-columns:2fr 1fr;gap:18px;align-items:start}
+.main{display:grid;grid-template-columns:2fr 1fr;gap:18px;align-items:start;position:relative;z-index:1}
 
 /* master table panel */
 .master{padding:0;overflow:hidden}
@@ -820,13 +823,15 @@ function renderMonthDetail(ym){
       <span><b>${newCount}</b> 新增教案</span>
       <span><b>${revCount}</b> 修訂紀錄</span>
     </div>
-    ${monthLogs.length?`<div class="pop-list">${monthLogs.slice(0,8).map(l=>`
-      <div class="pop-item">
+    ${monthLogs.length?`<div class="pop-list">${monthLogs.map(l=>{
+      const isNew=firstByCase[String(l.case_id||"")]===l;
+      return `<div class="pop-item">
         <span class="pop-date">${fmtDate(l.created_at)}</span>
+        <span class="pop-kind ${isNew?"":"rev"}">${isNew?"新增":"修訂"}</span>
         <span class="pop-name">${esc(caseTitle(l.case_id))}</span>
         <span class="pop-ver">${esc(l.version_num||"")}</span>
-      </div>`).join("")}</div>`:`<div class="pop-empty">本月尚無新增或修訂紀錄。</div>`}
-    ${monthLogs.length>8?`<div class="pop-more">另有 ${monthLogs.length-8} 筆未顯示</div>`:""}`;
+      </div>`;
+    }).join("")}</div>`:`<div class="pop-empty">本月尚無新增或修訂紀錄。</div>`}`;
 }
 
 function renderFilters(){
