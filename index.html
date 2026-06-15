@@ -252,7 +252,7 @@ td{padding:13px 18px;vertical-align:middle}
 .scrim{position:fixed;inset:0;background:rgba(15,27,53,.34);backdrop-filter:blur(6px);z-index:50;
   display:grid;place-items:center;padding:20px;opacity:0;pointer-events:none;transition:.2s}
 .scrim.on{opacity:1;pointer-events:auto}
-.modal{width:min(480px,100%);padding:24px;transform:translateY(10px) scale(.98);transition:.22s}
+.modal{width:min(640px,100%);padding:24px;transform:translateY(10px) scale(.98);transition:.22s}
 .scrim.on .modal{transform:none}
 .modal h3{margin:0 0 4px;font:600 17px var(--f-display);color:var(--ink)}
 .modal .hint{margin:0 0 18px;font-size:12.5px;color:var(--muted)}
@@ -416,8 +416,8 @@ tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 .modal .acts .btn.ghost{background:transparent}
 .field input,.field textarea,.field select{min-height:46px}
 .field textarea{min-height:78px}
-.cat-checks{display:grid;grid-template-columns:1fr;gap:8px}
-.cat-check{display:flex;align-items:center;gap:8px;min-height:38px;padding:9px 11px;border:1px solid var(--line-strong);border-radius:10px;background-color:rgba(255,255,255,.56);font:600 12.5px var(--f-body);color:var(--ink);cursor:pointer;transition:.15s}
+.cat-checks{display:flex;flex-wrap:wrap;gap:8px}
+.cat-check{display:flex;align-items:center;gap:7px;min-height:36px;padding:8px 10px;border:1px solid var(--line-strong);border-radius:10px;background-color:rgba(255,255,255,.56);font:600 12.5px var(--f-body);color:var(--ink);cursor:pointer;transition:.15s;flex:1 1 calc(50% - 8px);min-width:190px}
 .cat-check:hover{border-color:rgba(29,78,216,.45);background-color:rgba(255,255,255,.76)}
 .cat-check input{width:16px;min-height:16px;height:16px;margin:0;accent-color:var(--blue);flex:none}
 .cat-check span{line-height:1.35}
@@ -1008,10 +1008,8 @@ function openAdd(){
     <h3>新增教案</h3>
     <p class="hint">建立後寫入「教案」分頁；若選擇檔案會一併上傳雲端資料夾。</p>
     <div class="field"><label>教案名稱</label><input id="mTitle" placeholder="例：急性胸痛之病史詢問"/></div>
-    <div class="field"><div class="row2">
-      <div><label>適用科別</label><select id="mDept">${DEPTS.map(d=>`<option>${esc(d)}</option>`).join("")}</select></div>
-      <div><label>教案類型 <span class="opt">可複選</span></label>${categoryChecks("mCat","")}</div>
-    </div></div>
+    <div class="field"><label>適用科別</label><select id="mDept">${DEPTS.map(d=>`<option>${esc(d)}</option>`).join("")}</select></div>
+    <div class="field"><label>教案類型 <span class="opt">可複選</span></label>${categoryChecks("mCat","")}</div>
     <div class="field"><div class="row2">
       <div><label>制訂教案者</label><input id="mAuthor" placeholder="姓名"/></div>
       <div><label>制訂日期</label><input type="date" id="mDate" value="${todayStr()}"/></div>
@@ -1135,10 +1133,8 @@ function openEdit(c){
     <h3>編輯教案</h3>
     <p class="hint">修正打錯的基本資料，不會新增版次或時間軸節點。</p>
     <div class="field"><label>教案名稱</label><input id="eTitle" value="${esc(c.title||"")}"/></div>
-    <div class="field"><div class="row2">
-      <div><label>適用科別</label><select id="eDept">${DEPTS.map(d=>`<option ${d===c.department?"selected":""}>${esc(d)}</option>`).join("")}</select></div>
-      <div><label>教案類型 <span class="opt">可複選</span></label>${categoryChecks("eCat",c.category)}</div>
-    </div></div>
+    <div class="field"><label>適用科別</label><select id="eDept">${DEPTS.map(d=>`<option ${d===c.department?"selected":""}>${esc(d)}</option>`).join("")}</select></div>
+    <div class="field"><label>教案類型 <span class="opt">可複選</span></label>${categoryChecks("eCat",c.category)}</div>
     <div class="field"><div class="row2">
       <div><label>制訂教案者</label><input id="eAuthor" value="${esc(author)}" placeholder="姓名"/></div>
       <div><label>制訂日期</label><input type="date" id="eDate" value="${esc(created)}"/></div>
