@@ -135,6 +135,13 @@ body::before{
 }
 .kpi-updates:hover .kpi-pop,.kpi-updates:focus-within .kpi-pop{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 .pop-title{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:10px}
+.pop-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pop-head .pop-title{margin-bottom:0}
+.pop-month-controls{display:flex;align-items:center;gap:6px;flex:none}
+.pop-nav{width:28px;height:28px;border-radius:9px;border:1px solid var(--line-strong);background:rgba(255,255,255,.72);color:var(--ink);font:800 14px/1 var(--f-body);cursor:pointer}
+.pop-nav:hover{background:var(--glass-hi);color:var(--blue)}
+.pop-month-input{width:126px;border-radius:9px;border:1px solid var(--line-strong);background:rgba(255,255,255,.72);color:var(--ink);font:700 12px var(--f-mono);padding:6px 7px}
+.pop-hint{font-size:11px;color:var(--faint);margin:-3px 0 10px}
 .pop-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .pop-stats span{font-size:12px;color:var(--muted);padding:8px 9px;border-radius:10px;background:rgba(29,78,216,.07);border:1px solid var(--line)}
 .pop-stats b{font:800 18px/1 var(--f-display);color:var(--blue);margin-right:4px}
@@ -672,6 +679,7 @@ const CACHE_KEY="osce-cache-v3";
 let db={cases:[],logs:[]};
 let selectedId=null;
 let updatedSort="desc";
+let kpiMonthYm=null;
 const filters={q:"",dept:"",cat:""};
 
 const DEPTS=["內科","外科","兒科","婦科","急診"];
@@ -710,6 +718,13 @@ function datePartsInAppTZ(date){
   return parts.year&&parts.month&&parts.day?`${parts.year}-${parts.month}-${parts.day}`:"";
 }
 const todayStr=()=>datePartsInAppTZ(new Date());
+const currentYm=()=>todayStr().slice(0,7);
+function addMonths(ym,delta){
+  const m=/^(\d{4})-(\d{2})$/.exec(ym||currentYm());
+  const d=new Date(Date.UTC(m?+m[1]:+currentYm().slice(0,4),(m?+m[2]:+currentYm().slice(5,7))-1+delta,1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
+}
+function monthLabel(ym){return ym===currentYm()?"本月修訂":`${ym} 修訂`;}
 function nextCaseId(){
   let n=0; db.cases.forEach(c=>{const m=/^C(\d+)$/.exec(c.id); if(m)n=Math.max(n,+m[1]);});
   return "C"+String(n+1).padStart(3,"0");
@@ -822,10 +837,11 @@ async function loadData(){
 function renderKPI(){
   $("#kTotal").textContent=db.cases.length;
   $("#kTotalSub").textContent=`不重複 Case ID · ${db.logs.length} 筆修訂紀錄`;
-  const today=todayStr(), ym=today.slice(0,7), yy=today.slice(0,4);
+  const today=todayStr(), ym=kpiMonthYm||today.slice(0,7), yy=today.slice(0,4);
+  kpiMonthYm=ym;
   const mCount=db.logs.filter(l=>dateKey(l.created_at).slice(0,7)===ym).length;
   const yCount=db.logs.filter(l=>dateKey(l.created_at).slice(0,4)===yy).length;
-  $("#kMonth").innerHTML=`${mCount}<em>本月修訂</em>`;
+  $("#kMonth").innerHTML=`${mCount}<em>${esc(monthLabel(ym))}</em>`;
   $("#kYearSub").textContent=`本年度新增 / 修訂 ${yCount} 件`;
   renderMonthDetail(ym);
   const counts={}; db.cases.forEach(c=>categoryList(c.category).forEach(cat=>counts[cat]=(counts[cat]||0)+1));
@@ -844,6 +860,8 @@ function renderKPI(){
    渲染：篩選 / 主表格
    ════════════════════════════════════════════════════════ */
 function renderMonthDetail(ym){
+  kpiMonthYm=ym||currentYm();
+  ym=kpiMonthYm;
   const monthLogs=db.logs.filter(l=>dateKey(l.created_at).slice(0,7)===ym)
     .sort((a,b)=>dateKey(b.created_at).localeCompare(dateKey(a.created_at))||(verKey(b.version_num)-verKey(a.version_num)));
   const firstByCase={};
@@ -858,7 +876,15 @@ function renderMonthDetail(ym){
   const detail=$("#kMonthDetail");
   if(!detail) return;
   detail.innerHTML=`
-    <div class="pop-title">${esc(ym)} 本月明細</div>
+    <div class="pop-head">
+      <div class="pop-title">${esc(ym)} 月份明細</div>
+      <div class="pop-month-controls" aria-label="切換月份">
+        <button class="pop-nav" id="popPrevMonth" type="button" title="上一個月" aria-label="上一個月">‹</button>
+        <input class="pop-month-input" id="popMonthPicker" type="month" value="${esc(ym)}" aria-label="選擇查詢月份"/>
+        <button class="pop-nav" id="popNextMonth" type="button" title="下一個月" aria-label="下一個月">›</button>
+      </div>
+    </div>
+    <div class="pop-hint">可用左右箭頭或月份選單回查各月份新增與修訂狀態。</div>
     <div class="pop-stats">
       <span><b>${newCount}</b> 新增教案</span>
       <span><b>${revCount}</b> 修訂紀錄</span>
@@ -871,7 +897,11 @@ function renderMonthDetail(ym){
         <span class="pop-name">${esc(caseTitle(l.case_id))}</span>
         <span class="pop-ver">${esc(l.version_num||"")}</span>
       </div>`;
-    }).join("")}</div>`:`<div class="pop-empty">本月尚無新增或修訂紀錄。</div>`}`;
+    }).join("")}</div>`:`<div class="pop-empty">此月份尚無新增或修訂紀錄。</div>`}`;
+  const prev=$("#popPrevMonth"), next=$("#popNextMonth"), picker=$("#popMonthPicker");
+  if(prev) prev.onclick=()=>{kpiMonthYm=addMonths(kpiMonthYm,-1);renderKPI();};
+  if(next) next.onclick=()=>{kpiMonthYm=addMonths(kpiMonthYm,1);renderKPI();};
+  if(picker) picker.onchange=e=>{if(e.target.value){kpiMonthYm=e.target.value;renderKPI();}};
 }
 
 function renderFilters(){
