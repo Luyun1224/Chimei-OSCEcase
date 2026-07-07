@@ -605,7 +605,7 @@ tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
       <div class="head">
         <div class="search">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-          <input id="q" placeholder="搜尋教案名稱、編號…" />
+          <input id="q" placeholder="搜尋教案名稱、編號、撰寫／修改考官…" />
         </div>
         <select id="fDept" aria-label="依科別篩選"><option value="">全部科別</option></select>
         <select id="fCat" aria-label="依教案類型篩選"><option value="">全部類型</option></select>
@@ -756,8 +756,17 @@ function toast(msg,tone){
   clearTimeout(toastT); toastT=setTimeout(()=>t.className="toast",3200);
 }
 /* 取某教案最早一筆版本(制訂者/制訂日期來源) */
+function logsForCase(caseId){
+  return db.logs.filter(l=>String(l.case_id)===String(caseId));
+}
+function caseExaminerNames(caseId){
+  return [...new Set(logsForCase(caseId).map(l=>String(l.editor||"").trim()).filter(Boolean))];
+}
+function caseSearchText(c){
+  return [c.title,c.id,c.department,c.author,categoryLabel(c.category),...caseExaminerNames(c.id)].filter(Boolean).join(" ").toLowerCase();
+}
 function firstLog(caseId){
-  const ls=db.logs.filter(l=>String(l.case_id)===String(caseId))
+  const ls=logsForCase(caseId)
     .sort((a,b)=>dateKey(a.created_at).localeCompare(dateKey(b.created_at))||(verKey(a.version_num)-verKey(b.version_num)));
   return ls[0]||null;
 }
@@ -922,7 +931,7 @@ function filteredCases(){
   return db.cases
     .filter(c=>!filters.dept||c.department===filters.dept)
     .filter(c=>!filters.cat||categoryList(c.category).includes(filters.cat))
-    .filter(c=>!q||((c.title||"")+" "+(c.id||"")).toLowerCase().includes(q))
+    .filter(c=>!q||caseSearchText(c).includes(q))
     .sort((a,b)=>updatedSort==="asc"
       ? dateKey(a.updated_at).localeCompare(dateKey(b.updated_at))
       : dateKey(b.updated_at).localeCompare(dateKey(a.updated_at)));
