@@ -770,6 +770,31 @@ function firstLog(caseId){
     .sort((a,b)=>dateKey(a.created_at).localeCompare(dateKey(b.created_at))||(verKey(a.version_num)-verKey(b.version_num)));
   return ls[0]||null;
 }
+function firstLogMap(){
+  const firstByCase={};
+  db.logs.forEach(l=>{
+    const id=String(l.case_id||"");
+    if(!id) return;
+    const old=firstByCase[id];
+    if(!old
+      || dateKey(l.created_at).localeCompare(dateKey(old.created_at))<0
+      || (dateKey(l.created_at)===dateKey(old.created_at)&&verKey(l.version_num)<verKey(old.version_num))){
+      firstByCase[id]=l;
+    }
+  });
+  return firstByCase;
+}
+function isFirstLog(l,firstByCase){return firstByCase[String(l.case_id||"")]===l;}
+function yearActivityStats(year){
+  const firstByCase=firstLogMap();
+  return db.logs.filter(l=>dateKey(l.created_at).slice(0,4)===year).reduce((acc,l)=>{
+    const d=dateKey(l.created_at), isNew=isFirstLog(l,firstByCase);
+    if(isNew&&d.slice(5,7)==="01") return acc;
+    if(isNew) acc.newCount++; else acc.revCount++;
+    acc.total=acc.newCount+acc.revCount;
+    return acc;
+  },{newCount:0,revCount:0,total:0});
+}
 
 /* ════════════════════════════════════════════════════════
    連線設定 + 本機快取
@@ -849,9 +874,9 @@ function renderKPI(){
   const today=todayStr(), ym=kpiMonthYm||today.slice(0,7), yy=today.slice(0,4);
   kpiMonthYm=ym;
   const mCount=db.logs.filter(l=>dateKey(l.created_at).slice(0,7)===ym).length;
-  const yCount=db.logs.filter(l=>dateKey(l.created_at).slice(0,4)===yy).length;
+  const yStats=yearActivityStats(yy);
   $("#kMonth").innerHTML=`${mCount}<em>${esc(monthLabel(ym))}</em>`;
-  $("#kYearSub").textContent=`本年度新增 / 修訂 ${yCount} 件`;
+  $("#kYearSub").textContent=`本年度新增 ${yStats.newCount} / 修訂 ${yStats.revCount} 件（不含 1 月新增）`;
   renderMonthDetail(ym);
   const counts={}; db.cases.forEach(c=>categoryList(c.category).forEach(cat=>counts[cat]=(counts[cat]||0)+1));
   const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
@@ -873,13 +898,8 @@ function renderMonthDetail(ym){
   ym=kpiMonthYm;
   const monthLogs=db.logs.filter(l=>dateKey(l.created_at).slice(0,7)===ym)
     .sort((a,b)=>dateKey(b.created_at).localeCompare(dateKey(a.created_at))||(verKey(b.version_num)-verKey(a.version_num)));
-  const firstByCase={};
-  db.logs.forEach(l=>{
-    const id=String(l.case_id||"");
-    if(!id) return;
-    if(!firstByCase[id]||dateKey(l.created_at).localeCompare(dateKey(firstByCase[id].created_at))<0) firstByCase[id]=l;
-  });
-  const newCount=monthLogs.filter(l=>firstByCase[String(l.case_id||"")]===l).length;
+  const firstByCase=firstLogMap();
+  const newCount=monthLogs.filter(l=>isFirstLog(l,firstByCase)).length;
   const revCount=Math.max(monthLogs.length-newCount,0);
   const caseTitle=id=>(db.cases.find(c=>String(c.id)===String(id))||{}).title||id||"未命名教案";
   const detail=$("#kMonthDetail");
@@ -899,7 +919,7 @@ function renderMonthDetail(ym){
       <span><b>${revCount}</b> 修訂紀錄</span>
     </div>
     ${monthLogs.length?`<div class="pop-list">${monthLogs.map(l=>{
-      const isNew=firstByCase[String(l.case_id||"")]===l;
+      const isNew=isFirstLog(l,firstByCase);
       return `<div class="pop-item">
         <span class="pop-date">${fmtDate(l.created_at)}</span>
         <span class="pop-kind ${isNew?"":"rev"}">${isNew?"新增":"修訂"}</span>
