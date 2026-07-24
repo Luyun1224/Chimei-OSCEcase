@@ -585,7 +585,6 @@ tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
     <div class="glass kpi">
       <div class="lbl"><span class="dot" style="background:var(--blue)"></span>全院總教案數</div>
       <div class="val" id="kTotal">0</div>
-      <div class="sub" id="kTotalSub">不重複 Case ID 總量</div>
     </div>
     <div class="glass kpi kpi-updates" id="kUpdates" tabindex="0" aria-describedby="kMonthDetail">
       <div class="lbl"><span class="dot" style="background:var(--gold)"></span>近期賦能與更新</div>
@@ -870,13 +869,12 @@ async function loadData(){
    ════════════════════════════════════════════════════════ */
 function renderKPI(){
   $("#kTotal").textContent=db.cases.length;
-  $("#kTotalSub").textContent=`不重複 Case ID · ${db.logs.length} 筆修訂紀錄`;
   const today=todayStr(), ym=kpiMonthYm||today.slice(0,7), yy=today.slice(0,4);
   kpiMonthYm=ym;
   const mCount=db.logs.filter(l=>dateKey(l.created_at).slice(0,7)===ym).length;
   const yStats=yearActivityStats(yy);
   $("#kMonth").innerHTML=`${mCount}<em>${esc(monthLabel(ym))}</em>`;
-  $("#kYearSub").textContent=`本年度新增 ${yStats.newCount} / 修訂 ${yStats.revCount} 件（不含 1 月新增）`;
+  $("#kYearSub").textContent=`本年度新增 ${yStats.newCount} / 修訂 ${yStats.revCount} 件`;
   renderMonthDetail(ym);
   const counts={}; db.cases.forEach(c=>categoryList(c.category).forEach(cat=>counts[cat]=(counts[cat]||0)+1));
   const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
