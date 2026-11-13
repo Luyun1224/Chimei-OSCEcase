@@ -145,13 +145,24 @@ body::before{
 .pop-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .pop-stats span{font-size:12px;color:var(--muted);padding:8px 9px;border-radius:10px;background:rgba(29,78,216,.07);border:1px solid var(--line)}
 .pop-stats b{font:800 18px/1 var(--f-display);color:var(--blue);margin-right:4px}
-.pop-list{display:flex;flex-direction:column;gap:7px;max-height:min(360px,calc(100vh - 300px));overflow:auto;padding-right:3px}
+.pop-list{display:flex;flex-direction:column;gap:7px;max-height:min(200px,calc(100vh - 460px));overflow:auto;padding-right:3px}
 .pop-item{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center;font-size:12px}
 .pop-date,.pop-ver{font-family:var(--f-mono);color:var(--faint);white-space:nowrap}
 .pop-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pop-kind{font-size:10px;font-weight:800;letter-spacing:.4px;padding:2px 6px;border-radius:999px;background:rgba(29,78,216,.08);color:var(--blue);white-space:nowrap}
 .pop-kind.rev{background:rgba(224,137,11,.14);color:var(--gold-deep)}
 .pop-empty{font-size:12px;color:var(--faint);padding-top:2px}
+.pop-year{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-strong)}
+.pop-year-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.pop-year-head .pop-title{margin-bottom:0}
+.pop-year-sum{font-size:11px;color:var(--muted);white-space:nowrap}
+.pop-year-sum b{color:var(--blue);font-weight:800}
+.pop-year-list{display:flex;flex-direction:column;gap:8px;max-height:min(300px,calc(100vh - 420px));min-height:90px;overflow:auto;padding-right:3px}
+.pop-group{display:flex;flex-direction:column;gap:6px;padding:7px 8px;border-radius:10px;border:1px solid transparent}
+.pop-group.cur{background:rgba(29,78,216,.06);border-color:var(--line)}
+.pop-group-head{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:0;border:0;background:none;cursor:pointer;font:800 12px var(--f-mono);color:var(--ink);text-align:left}
+.pop-group-head:hover{color:var(--blue)}
+.pop-group-head span{font:600 11px var(--f-body);color:var(--muted)}
 .th-sort{
   all:unset;display:inline-flex;align-items:center;gap:5px;cursor:pointer;border-radius:8px;padding:5px 7px;margin:-5px -7px;
   color:var(--muted);font:700 11px/1 var(--f-body);letter-spacing:.8px;text-transform:uppercase
@@ -784,12 +795,18 @@ function firstLogMap(){
   return firstByCase;
 }
 function isFirstLog(l,firstByCase){return firstByCase[String(l.case_id||"")]===l;}
+/* 本年度計入的增修紀錄（一月份的「新增」視為期初匯入，不計入） */
+function yearActivityLogs(year,firstByCase=firstLogMap()){
+  return db.logs.filter(l=>{
+    const d=dateKey(l.created_at);
+    if(d.slice(0,4)!==year) return false;
+    return !(isFirstLog(l,firstByCase)&&d.slice(5,7)==="01");
+  });
+}
 function yearActivityStats(year){
   const firstByCase=firstLogMap();
-  return db.logs.filter(l=>dateKey(l.created_at).slice(0,4)===year).reduce((acc,l)=>{
-    const d=dateKey(l.created_at), isNew=isFirstLog(l,firstByCase);
-    if(isNew&&d.slice(5,7)==="01") return acc;
-    if(isNew) acc.newCount++; else acc.revCount++;
+  return yearActivityLogs(year,firstByCase).reduce((acc,l)=>{
+    if(isFirstLog(l,firstByCase)) acc.newCount++; else acc.revCount++;
     acc.total=acc.newCount+acc.revCount;
     return acc;
   },{newCount:0,revCount:0,total:0});
@@ -902,6 +919,22 @@ function renderMonthDetail(ym){
   const caseTitle=id=>(db.cases.find(c=>String(c.id)===String(id))||{}).title||id||"未命名教案";
   const detail=$("#kMonthDetail");
   if(!detail) return;
+  const sortLogs=(a,b)=>dateKey(b.created_at).localeCompare(dateKey(a.created_at))||(verKey(b.version_num)-verKey(a.version_num));
+  const year=ym.slice(0,4);
+  const yearLogs=yearActivityLogs(year,firstByCase).sort(sortLogs);
+  const yearNew=yearLogs.filter(l=>isFirstLog(l,firstByCase)).length;
+  const yearGroups={};
+  yearLogs.forEach(l=>(yearGroups[dateKey(l.created_at).slice(0,7)]||=[]).push(l));
+  const yearMonths=Object.keys(yearGroups).sort().reverse();
+  const itemHtml=l=>{
+    const isNew=isFirstLog(l,firstByCase);
+    return `<div class="pop-item">
+        <span class="pop-date">${fmtDate(l.created_at)}</span>
+        <span class="pop-kind ${isNew?"":"rev"}">${isNew?"新增":"修訂"}</span>
+        <span class="pop-name">${esc(caseTitle(l.case_id))}</span>
+        <span class="pop-ver">${esc(l.version_num||"")}</span>
+      </div>`;
+  };
   detail.innerHTML=`
     <div class="pop-head">
       <div class="pop-title">${esc(ym)} 月份明細</div>
@@ -911,20 +944,28 @@ function renderMonthDetail(ym){
         <button class="pop-nav" id="popNextMonth" type="button" title="下一個月" aria-label="下一個月">›</button>
       </div>
     </div>
-    <div class="pop-hint">可用左右箭頭或月份選單回查各月份新增與修訂狀態。</div>
+    <div class="pop-hint">可用左右箭頭或月份選單切換月份；下方同步列出本年度全部增修明細，點月份標題可快速切換。</div>
     <div class="pop-stats">
       <span><b>${newCount}</b> 新增教案</span>
       <span><b>${revCount}</b> 修訂紀錄</span>
     </div>
-    ${monthLogs.length?`<div class="pop-list">${monthLogs.map(l=>{
-      const isNew=isFirstLog(l,firstByCase);
-      return `<div class="pop-item">
-        <span class="pop-date">${fmtDate(l.created_at)}</span>
-        <span class="pop-kind ${isNew?"":"rev"}">${isNew?"新增":"修訂"}</span>
-        <span class="pop-name">${esc(caseTitle(l.case_id))}</span>
-        <span class="pop-ver">${esc(l.version_num||"")}</span>
-      </div>`;
-    }).join("")}</div>`:`<div class="pop-empty">此月份尚無新增或修訂紀錄。</div>`}`;
+    ${monthLogs.length?`<div class="pop-list">${monthLogs.map(itemHtml).join("")}</div>`:`<div class="pop-empty">此月份尚無新增或修訂紀錄。</div>`}
+    <div class="pop-year">
+      <div class="pop-year-head">
+        <div class="pop-title">${esc(year)} 年度明細</div>
+        <div class="pop-year-sum">新增 <b>${yearNew}</b> / 修訂 <b>${yearLogs.length-yearNew}</b> 件</div>
+      </div>
+      ${yearMonths.length?`<div class="pop-year-list">${yearMonths.map(m=>{
+        const logs=yearGroups[m], n=logs.filter(l=>isFirstLog(l,firstByCase)).length;
+        return `<div class="pop-group ${m===ym?"cur":""}">
+          <button class="pop-group-head" type="button" data-ym="${esc(m)}" title="切換至 ${esc(m)}">
+            ${esc(m)}<span>新增 ${n} / 修訂 ${logs.length-n}</span>
+          </button>
+          ${logs.map(itemHtml).join("")}
+        </div>`;
+      }).join("")}</div>`:`<div class="pop-empty">本年度尚無新增或修訂紀錄。</div>`}
+    </div>`;
+  detail.querySelectorAll(".pop-group-head").forEach(b=>b.onclick=()=>{kpiMonthYm=b.dataset.ym;renderKPI();});
   const prev=$("#popPrevMonth"), next=$("#popNextMonth"), picker=$("#popMonthPicker");
   if(prev) prev.onclick=()=>{kpiMonthYm=addMonths(kpiMonthYm,-1);renderKPI();};
   if(next) next.onclick=()=>{kpiMonthYm=addMonths(kpiMonthYm,1);renderKPI();};
